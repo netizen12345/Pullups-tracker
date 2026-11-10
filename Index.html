@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Apex Pull-Ups — Трекер подтягиваний и прогрессии</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+  <!-- Canvas Confetti for goal celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            oled: '#08080a',
+            surface: '#121216',
+            surfaceHover: '#1a1a22',
+            card: '#16161d',
+            borderDim: '#232330',
+            neon: {
+              DEFAULT: '#10b981',
+              bright: '#00ff88',
+              glow: 'rgba(0, 255, 136, 0.25)',
+              yellow: '#fbbf24',
+              red: '#f43f5e'
+            }
+          },
+          boxShadow: {
+            neon: '0 0 20px -3px rgba(0, 255, 136, 0.35)',
+            'neon-sm': '0 0 10px -2px rgba(0, 255, 136, 0.4)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom scrollbar & tap interactions */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #08080a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #232330;
+      border-radius: 9999px;
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    }
+    .tap-scale {
+      transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .tap-scale:active {
+      transform: scale(0.94);
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 136, 0.3); }
+      50% { box-shadow: 0 0 28px rgba(0, 255, 136, 0.65); }
+    }
+    .glow-ring {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+
+<body class="bg-oled text-zinc-100 min-h-screen flex flex-col items-center antialiased pb-16 selection:bg-neon selection:text-black">
+  <div class="w-full max-w-md mx-auto px-4 flex flex-col min-h-screen">
+    
+    <!-- Header -->
+    <header class="py-5 flex items-center justify-between border-b border-borderDim/70">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-neon to-emerald-700 flex items-center justify-center text-black font-extrabold shadow-neon-sm">
+          <i class="ph-bold ph-barbell text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+            APEX PULL-UPS
+            <span class="text-[10px] font-semibold bg-neon/15 text-neon-bright px-2 py-0.5 rounded-full border border-neon/30">VIBE</span>
+          </h1>
+          <p class="text-xs text-zinc-400" id="currentDateSubtitle">План и прогресс дня</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="openStatsBtn" class="tap-scale w-10 h-10 rounded-xl bg-surface border border-borderDim flex items-center justify-center text-zinc-300 hover:text-white hover:border-zinc-500">
+          <i class="ph-bold ph-chart-line-up text-lg"></i>
+        </button>
+        <button id="openSettingsBtn" class="tap-scale w-10 h-10 rounded-xl bg-surface border border-borderDim flex items-center justify-center text-zinc-300 hover:text-white hover:border-zinc-500">
+          <i class="ph-bold ph-gear-six text-lg"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 py-4 space-y-4">
+
+      <!-- Today's Target Card (Quit-Smoking Style Progress) -->
+      <section class="bg-card border border-borderDim rounded-3xl p-5 relative overflow-hidden shadow-xl">
+        <div class="absolute -top-12 -right-12 w-36 h-36 bg-neon/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div class="flex justify-between items-start mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-neon-bright">Цель на сегодня</span>
+              <span id="progressionBadge" class="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-zinc-300 font-mono">Неделя 1</span>
+            </div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span id="todayRepsTotal" class="text-4xl font-extrabold tracking-tight text-white font-mono">0</span>
+              <span class="text-xl font-medium text-zinc-500 font-mono">/ <span id="todayTargetDisplay">30</span></span>
+              <span class="text-xs font-semibold text-zinc-400">повт.</span>
+            </div>
+          </div>
+
+          <!-- Circular Radial Progress -->
+          <div class="relative w-16 h-16 flex items-center justify-center">
+            <svg class="w-full h-full -rotate-90" viewBox="0 0 36 36">
+              <path class="text-zinc-800" stroke-width="3.5" stroke="currentColor" fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path id="circleProgress" class="text-neon-bright transition-all duration-700 ease-out" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span id="circlePercent" class="absolute text-xs font-bold font-mono text-zinc-200">0%</span>
+          </div>
+        </div>
+
+        <!-- Linear Progress Bar -->
+        <div class="w-full bg-zinc-900 rounded-full h-2.5 overflow-hidden border border-zinc-800/80 mb-3">
+          <div id="linearProgressBar" class="h-full bg-gradient-to-r from-emerald-500 to-neon-bright rounded-full transition-all duration-500" style="width: 0%;"></div>
+        </div>
+
+        <!-- Motivational Status line -->
+        <div class="flex items-center justify-between text-xs">
+          <span id="motivationText" class="text-zinc-400 flex items-center gap-1.5 font-medium">
+            <i class="ph-fill ph-flame text-amber-500"></i> Сделай первый подход!
+          </span>
+          <span id="remainingText" class="text-zinc-400 font-mono">Осталось: 30</span>
+        </div>
+      </section>
+
+      <!-- Fast Tap Logging & Today's Sets -->
+      <section class="bg-card border border-borderDim rounded-3xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i class="ph-bold ph-plus-circle text-neon-bright"></i>
+            <h2 class="text-sm font-semibold tracking-wide uppercase text-zinc-300">Добавить подход</h2>
+          </div>
+          <span class="text-xs text-zinc-500 font-mono">быстрый тап</span>
+        </div>
+
+        <!-- Preset Buttons -->
+        <div class="grid grid-cols-5 gap-2">
+          <button data-reps="3" class="quick-add-btn tap-scale py-3 rounded-2xl bg-surface border border-borderDim hover:border-neon text-white font-mono font-bold text-base transition-all hover:bg-neon/10">+3</button>
+          <button data-reps="5" class="quick-add-btn tap-scale py-3 rounded-2xl bg-surface border border-borderDim hover:border-neon text-white font-mono font-bold text-base transition-all hover:bg-neon/10">+5</button>
+          <button data-reps="8" class="quick-add-btn tap-scale py-3 rounded-2xl bg-surface border border-borderDim hover:border-neon text-white font-mono font-bold text-base transition-all hover:bg-neon/10">+8</button>
+          <button data-reps="10" class="quick-add-btn tap-scale py-3 rounded-2xl bg-surface border border-borderDim hover:border-neon text-white font-mono font-bold text-base transition-all hover:bg-neon/10">+10</button>
+          <button data-reps="12" class="quick-add-btn tap-scale py-3 rounded-2xl bg-surface border border-borderDim hover:border-neon text-white font-mono font-bold text-base transition-all hover:bg-neon/10">+12</button>
+        </div>
+
+        <!-- Custom Input Row -->
+        <form id="customRepForm" class="flex items-center gap-2 pt-1">
+          <div class="relative flex-1">
+            <input id="customRepInput" type="number" min="1" max="200" placeholder="Свое число повторений..." 
+              class="w-full bg-surface border border-borderDim rounded-2xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-neon font-mono" />
+            <span class="absolute right-3.5 top-3.5 text-xs text-zinc-500 font-medium">повт.</span>
+          </div>
+          <button type="submit" class="tap-scale px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-neon-bright text-black font-bold text-sm flex items-center justify-center gap-1.5 shadow-neon-sm hover:brightness-110">
+            <i class="ph-bold ph-check text-base"></i> Записать
+          </button>
+        </form>
+
+        <!-- Today's Logged Sets Pills -->
+        <div class="pt-2 border-t border-borderDim/70">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs text-zinc-400 font-medium">Подходы за сегодня (<span id="setsCount">0</span>):</span>
+            <button id="undoLastBtn" class="text-xs text-zinc-500 hover:text-rose-400 flex items-center gap-1 transition-colors disabled:opacity-30 disabled:pointer-events-none">
+              <i class="ph-bold ph-arrow-u-up-left"></i> отменить
+            </button>
+          </div>
+
+          <div id="todaySetsList" class="flex flex-wrap gap-2 min-h-[36px] items-center">
+            <span class="text-xs text-zinc-600 italic">Пока нет записей за сегодня</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Habit Calendar (Smoke-Free / GitHub heatmap hybrid) -->
+      <section class="bg-card border border-borderDim rounded-3xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <i class="ph-bold ph-calendar text-neon-bright"></i>
+              <h2 class="text-sm font-semibold tracking-wide uppercase text-zinc-300">Календарь тренировок</h2>
+            </div>
+            <p id="calendarMonthTitle" class="text-xs text-zinc-400 mt-0.5">Ноябрь 2026</p>
+          </div>
+          <div class="flex items-center gap-1">
+            <button id="prevMonthBtn" class="tap-scale w-8 h-8 rounded-xl bg-surface border border-borderDim flex items-center justify-center text-zinc-300 hover:text-white">
+              <i class="ph-bold ph-caret-left"></i>
+            </button>
+            <button id="nextMonthBtn" class="tap-scale w-8 h-8 rounded-xl bg-surface border border-borderDim flex items-center justify-center text-zinc-300 hover:text-white">
+              <i class="ph-bold ph-caret-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Days of Week labels -->
+        <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+          <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+        </div>
+
+        <!-- Days Grid -->
+        <div id="calendarGrid" class="grid grid-cols-7 gap-1.5">
+          <!-- Calendar cells inserted via JS -->
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center justify-between pt-2 border-t border-borderDim/70 text-[11px] text-zinc-400">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+            <span>Выполнено</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
+            <span>Частично</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700 inline-block"></span>
+            <span>Отдых</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full ring-2 ring-neon-bright bg-zinc-800 inline-block"></span>
+            <span>Сегодня</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quit-Smoking Style Lifetime Progress & Metaphors -->
+      <section class="bg-card border border-borderDim rounded-3xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i class="ph-bold ph-trophy text-amber-400"></i>
+            <h2 class="text-sm font-semibold tracking-wide uppercase text-zinc-300">Накопительный прогресс</h2>
+          </div>
+          <span class="text-xs text-neon-bright font-mono">Life-time</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <!-- Total Pull-ups -->
+          <div class="bg-surface border border-borderDim rounded-2xl p-3.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-zinc-400 text-xs">
+              <span>Всего подтягиваний</span>
+              <i class="ph-bold ph-arrows-down-up text-neon"></i>
+            </div>
+            <div class="mt-2">
+              <span id="allTimeReps" class="text-2xl font-black font-mono text-white">0</span>
+              <span class="text-xs text-zinc-500 font-mono block">повторений</span>
+            </div>
+          </div>
+
+          <!-- Current Streak -->
+          <div class="bg-surface border border-borderDim rounded-2xl p-3.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-zinc-400 text-xs">
+              <span>Текущий стрик</span>
+              <i class="ph-fill ph-fire text-amber-400"></i>
+            </div>
+            <div class="mt-2">
+              <span id="streakDays" class="text-2xl font-black font-mono text-amber-400">0</span>
+              <span class="text-xs text-zinc-500 font-mono block">дней подряд</span>
+            </div>
+          </div>
+
+          <!-- Total Tonnage Lifted -->
+          <div class="bg-surface border border-borderDim rounded-2xl p-3.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-zinc-400 text-xs">
+              <span>Поднятый вес</span>
+              <i class="ph-bold ph-anchor text-blue-400"></i>
+            </div>
+            <div class="mt-2">
+              <span id="totalTonnage" class="text-2xl font-black font-mono text-white">0</span>
+              <span class="text-xs text-zinc-500 font-mono block" id="tonnageSub">тонн (вес: 75 кг)</span>
+            </div>
+          </div>
+
+          <!-- Elevation Climbed -->
+          <div class="bg-surface border border-borderDim rounded-2xl p-3.5 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-zinc-400 text-xs">
+              <span>Набрано высоты</span>
+              <i class="ph-bold ph-mountains text-purple-400"></i>
+            </div>
+            <div class="mt-2">
+              <span id="totalElevation" class="text-2xl font-black font-mono text-white">0</span>
+              <span class="text-xs text-zinc-500 font-mono block" id="elevationSub">метров (0.5м/раз)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-world Milestone comparison banner -->
+        <div id="milestoneBanner" class="bg-surfaceHover border border-neon/20 rounded-2xl p-3 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-neon/15 flex items-center justify-center text-neon-bright text-xl shrink-0">
+            <i class="ph-bold ph-rocket-launch"></i>
+          </div>
+          <div class="text-xs">
+            <p class="font-bold text-white" id="milestoneTitle">Первый рубеж</p>
+            <p class="text-zinc-400" id="milestoneDesc">Сделай свои первые повторения, чтобы начать восхождение.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Day Details Modal -->
+  <div id="dayModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-card border border-borderDim w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-borderDim pb-3">
+        <div>
+          <h3 id="modalDateTitle" class="text-base font-bold text-white">Тренировка</h3>
+          <p id="modalDateSubtitle" class="text-xs text-zinc-400">Детали дня</p>
+        </div>
+        <button id="closeDayModal" class="tap-scale w-8 h-8 rounded-full bg-surface border border-borderDim flex items-center justify-center text-zinc-400 hover:text-white">
+          <i class="ph-bold ph-x text-sm"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 py-2">
+        <div class="bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-xs text-zinc-500">Сумма повторений</span>
+          <div class="text-xl font-bold font-mono text-white mt-1" id="modalRepsTotal">0</div>
+        </div>
+        <div class="bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-xs text-zinc-500">Цель этого дня</span>
+          <div class="text-xl font-bold font-mono text-neon-bright mt-1" id="modalTarget">0</div>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="text-xs uppercase tracking-wider text-zinc-400 font-semibold mb-2">Подходы в этот день</h4>
+        <div id="modalSetsList" class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1">
+          <!-- set badges -->
+        </div>
+      </div>
+
+      <button id="closeModalBtn" class="tap-scale w-full py-3 bg-surface border border-borderDim rounded-2xl text-sm font-semibold text-zinc-200 hover:bg-zinc-800">
+        Закрыть
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Progression Overload Config) -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-card border border-borderDim w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-borderDim pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="ph-bold ph-sliders text-neon"></i>
+            План прогрессии & Настройки
+          </h3>
+          <p class="text-xs text-zinc-400">Настрой автоматическое увеличение нагрузки</p>
+        </div>
+        <button id="closeSettingsModal" class="tap-scale w-8 h-8 rounded-full bg-surface border border-borderDim flex items-center justify-center text-zinc-400 hover:text-white">
+          <i class="ph-bold ph-x text-sm"></i>
+        </button>
+      </div>
+
+      <form id="settingsForm" class="space-y-4 text-xs">
+        <!-- Baseline Daily Target -->
+        <div>
+          <label class="block font-semibold text-zinc-300 mb-1">Стартовая цель на день (повторений)</label>
+          <input id="cfgBaseTarget" type="number" min="5" max="500" required
+            class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon" />
+          <span class="text-[11px] text-zinc-500 mt-1 block">Базовый объем, с которого ты начинаешь.</span>
+        </div>
+
+        <!-- Progression Interval -->
+        <div>
+          <label class="block font-semibold text-zinc-300 mb-1">Интервал прогрессии нагрузки</label>
+          <select id="cfgInterval" class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon">
+            <option value="7">Каждую неделю (каждые 7 дней)</option>
+            <option value="14">Каждые 2 недели (каждые 14 дней)</option>
+            <option value="0">Без авто-прогрессии (фиксированная цель)</option>
+          </select>
+          <span class="text-[11px] text-zinc-500 mt-1 block">Цель будет автоматически расти каждые N дней с момента старта плана.</span>
+        </div>
+
+        <!-- Progression Step -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-zinc-300 mb-1">Шаг увеличения</label>
+            <input id="cfgStepVal" type="number" min="1" max="50" required
+              class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon" />
+          </div>
+          <div>
+            <label class="block font-semibold text-zinc-300 mb-1">Тип шага</label>
+            <select id="cfgStepType" class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon">
+              <option value="reps">+ повторений</option>
+              <option value="percent">+ процентов (%)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Start Date of Plan -->
+        <div>
+          <label class="block font-semibold text-zinc-300 mb-1">Дата старта текущего цикла</label>
+          <input id="cfgStartDate" type="date" required
+            class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon" />
+          <span class="text-[11px] text-zinc-500 mt-1 block">От этой даты рассчитывается текущая неделя плана.</span>
+        </div>
+
+        <!-- Body Weight for Tonnage -->
+        <div>
+          <label class="block font-semibold text-zinc-300 mb-1">Собственный вес (кг)</label>
+          <input id="cfgWeight" type="number" min="40" max="200" required
+            class="w-full bg-surface border border-borderDim rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-neon" />
+          <span class="text-[11px] text-zinc-500 mt-1 block">Для расчета суммарного поднятого тоннажа.</span>
+        </div>
+
+        <!-- Buttons -->
+        <div class="pt-2 flex gap-2">
+          <button type="submit" class="flex-1 py-3 bg-neon font-bold text-black rounded-xl text-sm shadow-neon-sm hover:brightness-110">
+            Сохранить настройки
+          </button>
+          <button type="button" id="resetDataBtn" class="px-4 py-3 bg-surface border border-rose-500/30 text-rose-400 rounded-xl hover:bg-rose-500/10" title="Сбросить все данные">
+            <i class="ph-bold ph-trash"></i>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Stats / Breakdown Modal -->
+  <div id="statsModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-card border border-borderDim w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-borderDim pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="ph-bold ph-trend-up text-neon-bright"></i>
+            Аналитика и рекорды
+          </h3>
+          <p class="text-xs text-zinc-400">Твои показатели и спортивные вехи</p>
+        </div>
+        <button id="closeStatsModal" class="tap-scale w-8 h-8 rounded-full bg-surface border border-borderDim flex items-center justify-center text-zinc-400 hover:text-white">
+          <i class="ph-bold ph-x text-sm"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div class="flex justify-between items-center bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-zinc-400">Рекорд повторений за 1 подход</span>
+          <span id="statMaxSingleSet" class="font-mono font-bold text-neon-bright text-base">0</span>
+        </div>
+        <div class="flex justify-between items-center bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-zinc-400">Лучший дневной объем</span>
+          <span id="statBestDayReps" class="font-mono font-bold text-white text-base">0</span>
+        </div>
+        <div class="flex justify-between items-center bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-zinc-400">Всего тренировочных дней</span>
+          <span id="statTotalActiveDays" class="font-mono font-bold text-white text-base">0</span>
+        </div>
+        <div class="flex justify-between items-center bg-surface p-3 rounded-2xl border border-borderDim">
+          <span class="text-zinc-400">Дней с выполненным планом 100%</span>
+          <span id="statTargetAchievedDays" class="font-mono font-bold text-neon-bright text-base">0</span>
+        </div>
+      </div>
+
+      <div class="bg-surfaceHover border border-borderDim rounded-2xl p-3 text-xs text-zinc-300">
+        <div class="font-semibold text-white mb-1 flex items-center gap-1.5">
+          <i class="ph-bold ph-lightbulb text-amber-400"></i> Принцип Progressive Overload
+        </div>
+        Систематическое увеличение нагрузки на 5–10% каждые 1-2 недели создает идеальный стимул для гипертрофии и силовых показателей без риска перетренированности.
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    (function() {
+      // Storage keys
+      const STORAGE_LOGS = 'apex_pullups_logs_v1';
+      const STORAGE_CONFIG = 'apex_pullups_config_v1';
+
+      // Default Configuration
+      const defaultConfig = {
+        baseTarget: 30,
+        intervalDays: 7, // 7 or 14 or 0 (no progression)
+        stepVal: 5,
+        stepType: 'reps', // 'reps' or 'percent'
+        startDate: getTodayIsoString(),
+        weight: 75
+      };
+
+      // State
+      let config = loadConfig();
+      let logs = loadLogs(); // { 'YYYY-MM-DD': [8, 8, 7, 5], ... }
+      let calendarDate = new Date(); // tracks current calendar display month
+
+      // Real world height landmarks in meters
+      const landmarks = [
+        { name: "Останкинская башня (смотровая)", height: 337 },
+        { name: "Бурдж-Халифа", height: 828 },
+        { name: "Эльбрус", height: 5642 },
+        { name: "Эверест", height: 8848 }
+      ];
+
+      // Helpers
+      function getTodayIsoString() {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      function loadConfig() {
+        try {
+          const raw = localStorage.getItem(STORAGE_CONFIG);
+          return raw ? { ...defaultConfig, ...JSON.parse(raw) } : { ...defaultConfig };
+        } catch (e) {
+          return { ...defaultConfig };
+        }
+      }
+
+      function saveConfig() {
+        localStorage.setItem(STORAGE_CONFIG, JSON.stringify(config));
+      }
+
+      function loadLogs() {
+        try {
+          const raw = localStorage.getItem(STORAGE_LOGS);
+          return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function saveLogs() {
+        localStorage.setItem(STORAGE_LOGS, JSON.stringify(logs));
+      }
+
+      // Calculate Target for a specific date based on progression formula
+      function getTargetForDate(dateStr) {
+        if (!config.intervalDays || config.intervalDays <= 0) {
+          return config.baseTarget;
+        }
+
+        const start = new Date(config.startDate);
+        const current = new Date(dateStr);
+        const diffMs = current - start;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) {
+          return config.baseTarget;
+        }
+
+        const cyclesPassed = Math.floor(diffDays / config.intervalDays);
+        let target = config.baseTarget;
+
+        if (config.stepType === 'reps') {
+          target = config.baseTarget + (cyclesPassed * config.stepVal);
+        } else {
+          // percentage compound or simple step
+          const multiplier = 1 + ((config.stepVal / 100) * cyclesPassed);
+          target = Math.round(config.baseTarget * multiplier);
+        }
+
+        return Math.max(5, target);
+      }
+
+      // Calculate current cycle week number for today
+      function getCurrentProgressionInfo() {
+        const today = new Date();
+        const start = new Date(config.startDate);
+        const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+        
+        if (config.intervalDays === 0) {
+          return { label: 'Фиксированный', target: config.baseTarget };
+        }
+
+        const currentCycle = Math.max(0, Math.floor(diffDays / config.intervalDays)) + 1;
+        const target = getTargetForDate(getTodayIsoString());
+        const cycleName = config.intervalDays === 7 ? `Неделя ${currentCycle}` : `Цикл ${currentCycle} (${config.intervalDays}д)`;
+
+        return { label: cycleName, target };
+      }
+
+      // DOM Elements
+      const todayRepsTotalEl = document.getElementById('todayRepsTotal');
+      const todayTargetDisplayEl = document.getElementById('todayTargetDisplay');
+      const circleProgressEl = document.getElementById('circleProgress');
+      const circlePercentEl = document.getElementById('circlePercent');
+      const linearProgressBarEl = document.getElementById('linearProgressBar');
+      const motivationTextEl = document.getElementById('motivationText');
+      const remainingTextEl = document.getElementById('remainingText');
+      const progressionBadgeEl = document.getElementById('progressionBadge');
+      const setsCountEl = document.getElementById('setsCount');
+      const todaySetsListEl = document.getElementById('todaySetsList');
+      const undoLastBtn = document.getElementById('undoLastBtn');
+      const customRepForm = document.getElementById('customRepForm');
+      const customRepInput = document.getElementById('customRepInput');
+      const calendarGridEl = document.getElementById('calendarGrid');
+      const calendarMonthTitleEl = document.getElementById('calendarMonthTitle');
+      const currentDateSubtitleEl = document.getElementById('currentDateSubtitle');
+
+      // Lifetime & Metaphors
+      const allTimeRepsEl = document.getElementById('allTimeReps');
+      const streakDaysEl = document.getElementById('streakDays');
+      const totalTonnageEl = document.getElementById('totalTonnage');
+      const tonnageSubEl = document.getElementById('tonnageSub');
+      const totalElevationEl = document.getElementById('totalElevation');
+      const elevationSubEl = document.getElementById('elevationSub');
+      const milestoneTitleEl = document.getElementById('milestoneTitle');
+      const milestoneDescEl = document.getElementById('milestoneDesc');
+
+      // Modals
+      const dayModal = document.getElementById('dayModal');
+      const settingsModal = document.getElementById('settingsModal');
+      const statsModal = document.getElementById('statsModal');
+
+      // Settings Inputs
+      const cfgBaseTarget = document.getElementById('cfgBaseTarget');
+      const cfgInterval = document.getElementById('cfgInterval');
+      const cfgStepVal = document.getElementById('cfgStepVal');
+      const cfgStepType = document.getElementById('cfgStepType');
+      const cfgStartDate = document.getElementById('cfgStartDate');
+      const cfgWeight = document.getElementById('cfgWeight');
+
+      // Initialize App UI
+      function init() {
+        formatCurrentDateHeader();
+        updateDashboard();
+        renderCalendar();
+        setupEventListeners();
+      }
+
+      function formatCurrentDateHeader() {
+        const options = { weekday: 'long', day: 'numeric', month: 'long' };
+        const dStr = new Date().toLocaleDateString('ru-RU', options);
+        currentDateSubtitleEl.textContent = dStr.charAt(0).toUpperCase() + dStr.slice(1);
+      }
+
+      // Add Reps to today's log
+      function addReps(count) {
+        if (!count || isNaN(count) || count <= 0) return;
+        const todayKey = getTodayIsoString();
+        if (!logs[todayKey]) {
+          logs[todayKey] = [];
+        }
+        
+        const prevTotal = logs[todayKey].reduce((a, b) => a + b, 0);
+        const todayTarget = getTargetForDate(todayKey);
+
+        logs[todayKey].push(parseInt(count, 10));
+        saveLogs();
+        updateDashboard();
+        renderCalendar();
+
+        // Check if user just reached/passed the target for celebration!
+        const newTotal = logs[todayKey].reduce((a, b) => a + b, 0);
+        if (prevTotal < todayTarget && newTotal >= todayTarget) {
+          triggerCelebration();
+        }
+      }
+
+      // Undo last rep of today
+      function undoLastRep() {
+        const todayKey = getTodayIsoString();
+        if (logs[todayKey] && logs[todayKey].length > 0) {
+          logs[todayKey].pop();
+          if (logs[todayKey].length === 0) {
+            delete logs[todayKey];
+          }
+          saveLogs();
+          updateDashboard();
+          renderCalendar();
+        }
+      }
+
+      // Celebration Confetti
+      function triggerCelebration() {
+        try {
+          confetti({
+            particleCount: 70,
+            spread: 60,
+            origin: { y: 0.7 },
+            colors: ['#00ff88', '#10b981', '#34d399', '#ffffff']
+          });
+        } catch (e) {}
+      }
+
+      // Compute streak
+      function calculateStreak() {
+        const today = new Date();
+        let streak = 0;
+        let checkDate = new Date(today);
+
+        // check if today has completed or partially logged reps
+        const todayKey = getTodayIsoString();
+        const todayReps = (logs[todayKey] || []).reduce((a, b) => a + b, 0);
+        const todayTarget = getTargetForDate(todayKey);
+
+        // If today is completed or has reps, we start checking from today
+        // Otherwise start checking from yesterday
+        if (todayReps < todayTarget) {
+          checkDate.setDate(checkDate.getDate() - 1);
+        }
+
+        while (true) {
+          const year = checkDate.getFullYear();
+          const month = String(checkDate.getMonth() + 1).padStart(2, '0');
+          const day = String(checkDate.getDate()).padStart(2, '0');
+          const dStr = `${year}-${month}-${day}`;
+
+          const dayReps = (logs[dStr] || []).reduce((a, b) => a + b, 0);
+          const dayTarget = getTargetForDate(dStr);
+
+          // Count day as active if reached target
+          if (dayReps >= dayTarget && dayTarget > 0) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        }
+        return streak;
+      }
+
+      // Update Dashboard UI
+      function updateDashboard() {
+        const todayKey = getTodayIsoString();
+        const todaySets = logs[todayKey] || [];
+        const todayReps = todaySets.reduce((a, b) => a + b, 0);
+        const progInfo = getCurrentProgressionInfo();
+        const target = progInfo.target;
+
+        // Header and Badge
+        progressionBadgeEl.textContent = progInfo.label;
+        todayRepsTotalEl.textContent = todayReps;
+        todayTargetDisplayEl.textContent = target;
+
+        // Percent & Progress
+        const percent = target > 0 ? Math.min(100, Math.round((todayReps / target) * 100)) : 0;
+        circleProgressEl.setAttribute('stroke-dasharray', `${percent}, 100`);
+        circlePercentEl.textContent = `${percent}%`;
+        linearProgressBarEl.style.width = `${percent}%`;
+
+        // Remaining & Motivation message
+        const remaining = Math.max(0, target - todayReps);
+        remainingTextEl.textContent = remaining > 0 ? `Осталось: ${remaining}` : 'Цель закрыта!';
+
+        if (todayReps === 0) {
+          motivationTextEl.innerHTML = `<i class="ph-fill ph-flame text-amber-500"></i> Сделай первый подход!`;
+          motivationTextEl.className = 'text-zinc-400 flex items-center gap-1.5 font-medium';
+        } else if (todayReps < target) {
+          motivationTextEl.innerHTML = `<i class="ph-bold ph-lightning text-neon-bright"></i> Отличный темп, жми дальше!`;
+          motivationTextEl.className = 'text-neon-bright flex items-center gap-1.5 font-medium';
+        } else {
+          motivationTextEl.innerHTML = `<i class="ph-fill ph-check-circle text-neon-bright"></i> План на сегодня выполнен на 100%!`;
+          motivationTextEl.className = 'text-neon-bright flex items-center gap-1.5 font-medium font-bold';
+        }
+
+        // Sets count & Pills
+        setsCountEl.textContent = todaySets.length;
+        undoLastBtn.disabled = todaySets.length === 0;
+
+        if (todaySets.length === 0) {
+          todaySetsListEl.innerHTML = `<span class="text-xs text-zinc-600 italic">Пока нет записей за сегодня</span>`;
+        } else {
+          todaySetsListEl.innerHTML = '';
+          todaySets.forEach((reps, index) => {
+            const pill = document.createElement('div');
+            pill.className = 'flex items-center gap-1 bg-surfaceHover border border-zinc-700/80 hover:border-zinc-500 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-zinc-200 transition-colors';
+            pill.innerHTML = `
+              <span>${reps}</span>
+              <button data-index="${index}" class="remove-single-set text-zinc-500 hover:text-rose-400 ml-0.5" title="Удалить этот подход">
+                <i class="ph-bold ph-x text-[10px]"></i>
+              </button>
+            `;
+            todaySetsListEl.appendChild(pill);
+          });
+        }
+
+        // Lifetime stats
+        updateLifetimeStats();
+      }
+
+      function updateLifetimeStats() {
+        let allTimeReps = 0;
+        let totalActiveDays = 0;
+        let achievedTargetDays = 0;
+        let maxSingleSet = 0;
+        let bestDayReps = 0;
+
+        Object.keys(logs).forEach(dateStr => {
+          const sets = logs[dateStr] || [];
+          if (sets.length > 0) {
+            totalActiveDays++;
+            const daySum = sets.reduce((a, b) => a + b, 0);
+            allTimeReps += daySum;
+
+            if (daySum > bestDayReps) bestDayReps = daySum;
+
+            const t = getTargetForDate(dateStr);
+            if (daySum >= t && t > 0) achievedTargetDays++;
+
+            sets.forEach(r => {
+              if (r > maxSingleSet) maxSingleSet = r;
+            });
+          }
+        });
+
+        allTimeRepsEl.textContent = allTimeReps.toLocaleString('ru-RU');
+        streakDaysEl.textContent = calculateStreak();
+
+        // Tonnage = (allTimeReps * weight) / 1000 in tons
+        const userWeight = config.weight || 75;
+        const tons = ((allTimeReps * userWeight) / 1000).toFixed(1);
+        totalTonnageEl.textContent = tons;
+        tonnageSubEl.textContent = `тонн (вес: ${userWeight} кг)`;
+
+        // Elevation = allTimeReps * 0.5 meters
+        const elevationMeters = Math.round(allTimeReps * 0.5);
+        totalElevationEl.textContent = elevationMeters.toLocaleString('ru-RU');
+        elevationSubEl.textContent = `метров (0.5м/раз)`;
+
+        // Metaphor Milestone Banner
+        updateMilestoneBanner(elevationMeters, tons);
+
+        // Stats modal metrics
+        document.getElementById('statMaxSingleSet').textContent = maxSingleSet;
+        document.getElementById('statBestDayReps').textContent = bestDayReps;
+        document.getElementById('statTotalActiveDays').textContent = totalActiveDays;
+        document.getElementById('statTargetAchievedDays').textContent = achievedTargetDays;
+      }
+
+      function updateMilestoneBanner(elevationMeters, tonnage) {
+        let currentMilestone = landmarks[0];
+        let nextMilestone = null;
+
+        for (let i = 0; i < landmarks.length; i++) {
+          if (elevationMeters >= landmarks[i].height) {
+            currentMilestone = landmarks[i];
+            nextMilestone = landmarks[i + 1] || null;
+          } else {
+            nextMilestone = landmarks[i];
+            break;
+          }
+        }
+
+        if (elevationMeters === 0) {
+          milestoneTitleEl.textContent = "Начало восхождения";
+          milestoneDescEl.textContent = `Первая цель: преодолеть высоту ${landmarks[0].name} (${landmarks[0].height}м).`;
+        } else if (!nextMilestone) {
+          milestoneTitleEl.textContent = `Выше Эвереста! 🏔️`;
+          milestoneDescEl.textContent = `Ты суммарно набрал ${elevationMeters}м высоты и поднял ${tonnage} тонн! Это легендарно!`;
+        } else {
+          const needed = nextMilestone.height - elevationMeters;
+          milestoneTitleEl.textContent = `Покорение: ${nextMilestone.name}`;
+          milestoneDescEl.textContent = `Осталось набрать еще ${needed}м (${needed * 2} подтягиваний), чтобы покорить эту высоту!`;
+        }
+      }
+
+      // Render Calendar
+      function renderCalendar() {
+        const year = calendarDate.getFullYear();
+        const month = calendarDate.getMonth();
+
+        const monthNames = [
+          "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+          "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+        ];
+        calendarMonthTitleEl.textContent = `${monthNames[month]} ${year}`;
+
+        calendarGridEl.innerHTML = '';
+
+        // Determine first day of month (Russian locale: Monday is 0)
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        // convert Sunday (0) to 6, Mon (1) to 0, etc.
+        const startOffset = (firstDayIndex === 0) ? 6 : firstDayIndex - 1;
+
+        const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+        const todayIso = getTodayIsoString();
+
+        // Empty padding cells before 1st of month
+        for (let i = 0; i < startOffset; i++) {
+          const emptyCell = document.createElement('div');
+          emptyCell.className = 'aspect-square rounded-xl bg-transparent opacity-0 pointer-events-none';
+          calendarGridEl.appendChild(emptyCell);
+        }
+
+        // Render actual days
+        for (let day = 1; day <= totalDaysInMonth; day++) {
+          const mStr = String(month + 1).padStart(2, '0');
+          const dStr = String(day).padStart(2, '0');
+          const dateKey = `${year}-${mStr}-${dStr}`;
+
+          const daySets = logs[dateKey] || [];
+          const repsTotal = daySets.reduce((a, b) => a + b, 0);
+          const dayTarget = getTargetForDate(dateKey);
+
+          const isToday = (dateKey === todayIso);
+
+          const cell = document.createElement('button');
+          cell.setAttribute('type', 'button');
+          cell.setAttribute('data-date', dateKey);
+
+          let bgClass = "bg-surface border-borderDim text-zinc-400";
+          let badgeDot = "";
+
+          if (repsTotal >= dayTarget && dayTarget > 0) {
+            // Hit Target (Emerald Neon)
+            bgClass = "bg-emerald-950/60 border-emerald-500/60 text-neon-bright font-bold shadow-neon-sm";
+            badgeDot = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>`;
+          } else if (repsTotal > 0) {
+            // Partial
+            bgClass = "bg-amber-950/40 border-amber-500/50 text-amber-300 font-semibold";
+            badgeDot = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>`;
+          }
+
+          const ringClass = isToday ? "ring-2 ring-neon-bright ring-offset-2 ring-offset-oled" : "";
+
+          cell.className = `tap-scale aspect-square rounded-2xl border p-1 flex flex-col items-center justify-between transition-all ${bgClass} ${ringClass}`;
+          cell.innerHTML = `
+            <span class="text-[11px] font-mono leading-none">${day}</span>
+            <div class="flex flex-col items-center justify-center -space-y-0.5">
+              ${repsTotal > 0 ? `<span class="text-[10px] font-mono font-extrabold leading-none">${repsTotal}</span>` : ''}
+              ${badgeDot}
+            </div>
+          `;
+
+          cell.addEventListener('click', () => openDayModal(dateKey));
+          calendarGridEl.appendChild(cell);
+        }
+      }
+
+      // Day Modal Details
+      function openDayModal(dateStr) {
+        const parts = dateStr.split('-');
+        const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+        const options = { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' };
+        const formatted = dateObj.toLocaleDateString('ru-RU', options);
+
+        const sets = logs[dateStr] || [];
+        const total = sets.reduce((a, b) => a + b, 0);
+        const target = getTargetForDate(dateStr);
+
+        document.getElementById('modalDateTitle').textContent = formatted;
+        document.getElementById('modalDateSubtitle').textContent = total >= target ? 'Цель достигнута 🎯' : 'Тренировочный день';
+        document.getElementById('modalRepsTotal').textContent = `${total} повт.`;
+        document.getElementById('modalTarget').textContent = `${target} повт.`;
+
+        const modalSetsList = document.getElementById('modalSetsList');
+        modalSetsList.innerHTML = '';
+
+        if (sets.length === 0) {
+          modalSetsList.innerHTML = `<span class="text-xs text-zinc-500 italic">В этот день не было записанных подходов</span>`;
+        } else {
+          sets.forEach((r, idx) => {
+            const badge = document.createElement('div');
+            badge.className = 'bg-surfaceHover border border-zinc-700 px-3 py-1.5 rounded-xl text-xs font-mono text-zinc-200';
+            badge.textContent = `Сет ${idx + 1}: ${r} раз`;
+            modalSetsList.appendChild(badge);
+          });
+        }
+
+        showModal(dayModal);
+      }
+
+      function showModal(modalEl) {
+        modalEl.classList.remove('hidden');
+        setTimeout(() => {
+          modalEl.classList.remove('opacity-0');
+        }, 10);
+      }
+
+      function hideModal(modalEl) {
+        modalEl.classList.add('opacity-0');
+        setTimeout(() => {
+          modalEl.classList.add('hidden');
+        }, 200);
+      }
+
+      // Open Settings Modal & populate values
+      function openSettings() {
+        cfgBaseTarget.value = config.baseTarget;
+        cfgInterval.value = config.intervalDays;
+        cfgStepVal.value = config.stepVal;
+        cfgStepType.value = config.stepType;
+        cfgStartDate.value = config.startDate;
+        cfgWeight.value = config.weight;
+
+        showModal(settingsModal);
+      }
+
+      // Event Listeners setup
+      function setupEventListeners() {
+        // Quick preset buttons (+3, +5, +8, etc.)
+        document.querySelectorAll('.quick-add-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const val = parseInt(btn.getAttribute('data-reps'), 10);
+            addReps(val);
+          });
+        });
+
+        // Custom Rep Form
+        customRepForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const val = parseInt(customRepInput.value, 10);
+          if (val && val > 0) {
+            addReps(val);
+            customRepInput.value = '';
+            customRepInput.blur();
+          }
+        });
+
+        // Undo button
+        undoLastBtn.addEventListener('click', undoLastRep);
+
+        // Delete specific set from today's list
+        todaySetsListEl.addEventListener('click', (e) => {
+          const delBtn = e.target.closest('.remove-single-set');
+          if (delBtn) {
+            const index = parseInt(delBtn.getAttribute('data-index'), 10);
+            const todayKey = getTodayIsoString();
+            if (logs[todayKey] && logs[todayKey][index] !== undefined) {
+              logs[todayKey].splice(index, 1);
+              if (logs[todayKey].length === 0) {
+                delete logs[todayKey];
+              }
+              saveLogs();
+              updateDashboard();
+              renderCalendar();
+            }
+          }
+        });
+
+        // Month Navigation
+        document.getElementById('prevMonthBtn').addEventListener('click', () => {
+          calendarDate.setMonth(calendarDate.getMonth() - 1);
+          renderCalendar();
+        });
+        document.getElementById('nextMonthBtn').addEventListener('click', () => {
+          calendarDate.setMonth(calendarDate.getMonth() + 1);
+          renderCalendar();
+        });
+
+        // Modals control
+        document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
+        document.getElementById('closeSettingsModal').addEventListener('click', () => hideModal(settingsModal));
+        document.getElementById('closeDayModal').addEventListener('click', () => hideModal(dayModal));
+        document.getElementById('closeModalBtn').addEventListener('click', () => hideModal(dayModal));
+
+        document.getElementById('openStatsBtn').addEventListener('click', () => showModal(statsModal));
+        document.getElementById('closeStatsModal').addEventListener('click', () => hideModal(statsModal));
+
+        // Settings Form submission
+        document.getElementById('settingsForm').addEventListener('submit', (e) => {
+          e.preventDefault();
+          config.baseTarget = parseInt(cfgBaseTarget.value, 10) || 30;
+          config.intervalDays = parseInt(cfgInterval.value, 10);
+          config.stepVal = parseInt(cfgStepVal.value, 10) || 5;
+          config.stepType = cfgStepType.value;
+          config.startDate = cfgStartDate.value || getTodayIsoString();
+          config.weight = parseInt(cfgWeight.value, 10) || 75;
+
+          saveConfig();
+          hideModal(settingsModal);
+          updateDashboard();
+          renderCalendar();
+        });
+
+        // Reset Data button
+        document.getElementById('resetDataBtn').addEventListener('click', () => {
+          const confirmation = window.prompt("Напишите 'СБРОС' для удаления всех тренировок и сброса настроек:");
+          if (confirmation === 'СБРОС' || confirmation === 'сброс') {
+            logs = {};
+            config = { ...defaultConfig };
+            saveLogs();
+            saveConfig();
+            hideModal(settingsModal);
+            updateDashboard();
+            renderCalendar();
+          }
+        });
+
+        // Backdrop click to close modals
+        [dayModal, settingsModal, statsModal].forEach(modal => {
+          modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+              hideModal(modal);
+            }
+          });
+        });
+      }
+
+      // Initialize on DOM ready
+      window.onload = function() {
+        init();
+      };
+    })();
+  </script>
+</body>
+</html>
